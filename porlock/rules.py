@@ -14,6 +14,17 @@ class NamedList(list):
     def __repr__(self):
         return self.name
 
+    def __getattribute__(self, item):
+        # TODO: these names aren't amazingly clear
+        item_mapping = {"event": 0, "when": 1, "match": 2, "match_events": 3, "period_when": 4, "period_when_time": 5,
+                        "identifier": 6, "ignore_events": 7, "ignore_when": 8, "ignore_when_time": 9,
+                        "match_period": 10, "event_period": 11}
+
+        if item in item_mapping:
+            return self[item_mapping[item]]
+
+        return super().__getattribute__(item)
+
 
 def construct_rule(event, when, match, other_event, period_when, period, track, exclude_event, exclude_period_when,
                    exclude_period, limit_period, review_period):

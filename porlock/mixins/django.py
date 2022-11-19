@@ -25,3 +25,9 @@ class DjangoRiskMixin(BaseRiskMixin):
             event_types_q |= Q(**{cls.event_type_field: rule[3]})
 
         return cls.objects.filter(**filters).filter(dates_q).filter(event_types_q)
+
+    @classmethod
+    def load_events_for_analysis(cls, event_type, start_time, end_time, *args, **kwargs):
+        """ Load an initial set of rules """
+        filters = {cls.event_type_field: event_type, f"{cls.event_date_field}__range": (start_time, end_time)}
+        return cls.objects.filter(**filters)

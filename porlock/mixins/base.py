@@ -1,4 +1,10 @@
+import logging
+import typing
+from datetime import timedelta, datetime
+
 from .. import snoop
+
+logger = logging.getLogger("porlock.risk_event")
 
 
 class BaseRiskMixin:
@@ -8,34 +14,55 @@ class BaseRiskMixin:
     event_instance_field = None
 
     @property
-    def risk_event_type(self):
+    def risk_event_type(self) -> str:
         return getattr(self, self.event_type_field, None)
 
     @property
-    def risk_event_date(self):
+    def risk_event_date(self) -> datetime:
         return getattr(self, self.event_date_field, None)
 
     @property
-    def risk_event_instance(self):
+    def risk_event_instance(self) -> typing.Any:
         return getattr(self, self.event_instance_field, None)
 
-    def get_event_instance_filter(self):
+    def get_event_instance_filter(self) -> dict:
         return {self.event_instance_field: getattr(self, self.event_instance_field)}
 
-    @classmethod
-    def load_events_for_analysis(cls, event_type, start_time, end_time):
-        """ Load an initial set of rules """
-        filters = {cls.event_type_field: event_type, f"{cls.event_date_field}__range": (start_time, end_time)}
-        return cls.objects.filter(**filters)
+    def construct_date_range(self, rule):
+        if rule.ignore_when_time >= 0:
+            rule_start_time = self.risk_event_date + timedelta(seconds=rule.ignore_when_time)
+            rule_end_time = self.risk_event_date + timedelta(seconds=rule.match_period)
+        else:
+            rule_start_time = self.risk_event_date + timedelta(seconds=rule.match_period)
+            rule_end_time = self.risk_event_date + timedelta(seconds=rule.ignore_when_time)
+
+        return rule_start_time, rule_end_time
 
     @classmethod
-    def load_related_events(cls, ruleset, match):
+    def load_events_for_analysis(cls, event_type, start_time, end_time, *args, **kwargs) -> typing.Iterable:
+        """ Load events for analysis """
+        raise NotImplementedError
+
+    @classmethod
+    def load_related_events(cls, ruleset, match) -> typing.Iterable:
         """ Load more rules based on the criteria in the matching event """
         raise NotImplementedError
 
     @classmethod
-    def identify_risk(cls, events):
+    def identify_risk(cls, events, aggregate_events=False):
+        aggregated_events = {}
+
         for ruleset, match in snoop.find_rule_match(events):
             related_events = cls.load_related_events(ruleset, match)
-            for risk in snoop.inspect_related_events(ruleset, match, related_events):
-                print("Risk identified!", risk)
+            for risk_event in snoop.inspect_related_events(ruleset, match, related_events):
+                if not aggregate_events:
+                    logger.info("Risk Identified: [%s]", risk_event)
+                    yield risk_event
+                else:
+                    if match not in aggregated_events:
+                        aggregated_events[match] = []
+                    aggregated_events[match].append(risk_event[2])
+
+        if aggregate_events:
+            for match, events in aggregated_events.items():
+                yield "Aggregated Events", match, events # [0]

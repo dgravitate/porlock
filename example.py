@@ -2,10 +2,10 @@ from datetime import datetime, timedelta
 
 from porlock.mixins import BaseRiskMixin
 from porlock.rules import registry
-from porlock import snoop
 
 test_rules = [
     ["Password Change After OTP Login", "otp login", "followed by", "any", ["password change"], "after", "2d", "user", ["password change"], "before", "1h", "14d", "30d"]
+    # ["Password Change After OTP Login", "otp login", "followed by", "all", ["password change", "password reset", "account locked"], "after", "2d", "user", ["password change"], "before", "1h", "14d", "30d"]
 ]
 
 for rule in test_rules:
@@ -27,11 +27,15 @@ class Event(BaseRiskMixin):
             setattr(self, item, value)
 
     def __str__(self):
-        return self.event
+        return f"{self.event} for user {self.user}: [{self.event_date}]"
 
     @classmethod
     def load_related_events(cls, ruleset, match):
-        return events
+        matching_events = []
+        for event in events:
+            if event.user == match.user:
+                matching_events.append(event)
+        return matching_events
 
 
 def load_events_for_analysis():
@@ -47,12 +51,26 @@ def load_related_events(ruleset, event):
 events.append(Event(event="otp login", event_date=datetime.now(), user=1))
 events.append(Event(event="password change", event_date=datetime.now() + timedelta(minutes=20), user=1))
 events.append(Event(event="password change", event_date=datetime.now() + timedelta(days=5), user=1))
+events.append(Event(event="password reset", event_date=datetime.now() + timedelta(days=5), user=1))
+events.append(Event(event="account locked", event_date=datetime.now() + timedelta(days=5), user=1))
+
+events.append(Event(event="otp2 login", event_date=datetime.now() + timedelta(days=5), user=2))
+events.append(Event(event="password change", event_date=datetime.now() + timedelta(days=13), user=1))
 events.append(Event(event="password change", event_date=datetime.now() + timedelta(days=5), user=2))
 events.append(Event(event="password change", event_date=datetime.now() + timedelta(days=20), user=1))
 
-#for ruleset, match in snoop.find_rule_match(load_events_for_analysis()):
-#    related_events = load_related_events(ruleset, match)
-#    for risk in snoop.inspect_related_events(ruleset, match, related_events):
-#        print("Risk identified!", risk, risk[1].risk_event_type, risk[1].risk_event_date, risk[1].risk_event_instance)
 
-Event.identify_risk(load_events_for_analysis())
+print("=============================")
+for rule, original_event, risk_event in Event.identify_risk(load_events_for_analysis()):
+    print(rule)
+    print("     ", original_event)
+    print("          ", risk_event.event, risk_event.event_date)
+print("=============================")
+
+print("=============================")
+for rule, original_event, risk_event in Event.identify_risk(load_events_for_analysis(), aggregate_events=True):
+    print(rule)
+    print("     ", original_event)
+    for event in risk_event:
+        print("          ", event.event, event.event_date)
+print("=============================")
